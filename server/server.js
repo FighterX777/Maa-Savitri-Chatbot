@@ -1,5 +1,10 @@
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Load .env from server folder in development, use process.env in production (Vercel)
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config({ path: path.join(__dirname, '.env') });
+}
+
 const express = require("express");
 const cors = require("cors");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -69,20 +74,16 @@ Do NOT make up information not listed above. If unsure, say the team will get ba
  
 
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-3.1-flash-lite-preview",
+    model: "gemini-2.5-flash",
     systemInstruction: SYSTEM_PROMPT 
 });
 
 const conversationStore = {};
 
 app.post("/api/chat", async (req, res) => {
-    console.log('📨 Received chat request');
     const { message, sessionId } = req.body;
-    console.log('Message:', message);
-    console.log('SessionId:', sessionId);
 
     if (!message || !sessionId) {
-        console.log('❌ Missing message or sessionId');
         return res.status(400).json({ error: "message and sessionId are required" });
     }
 
@@ -91,17 +92,14 @@ app.post("/api/chat", async (req, res) => {
     }
 
     try {
-        console.log('🤖 Calling Gemini API...');
         const history = conversationStore[sessionId].map(msg => ({
             role: msg.role === "assistant" ? "model" : "user",
             parts: [{ text: msg.content }],
         }));
 
         const chat = model.startChat({ history });
-
         const result = await chat.sendMessage(message);
         const assistantMessage = result.response.text();
-        console.log('✅ Got response from Gemini');
 
         conversationStore[sessionId].push({ role: "user", content: message });
         conversationStore[sessionId].push({ role: "assistant", content: assistantMessage });
@@ -113,10 +111,8 @@ app.post("/api/chat", async (req, res) => {
         res.json({ reply: assistantMessage, sessionId });
 
     } catch (error) {
-        console.error("❌ Gemini API error:", error);
-        console.error("Error details:", error.message);
-        console.error("API Key present:", !!process.env.GEMINI_API_KEY);
-        res.status(500).json({ error: "Failed to get response from AI", details: error.message });
+        console.error("Gemini API error:", error.message);
+        res.status(500).json({ error: "Failed to get response from AI" });
     }
 });
 
@@ -130,24 +126,6 @@ app.get("/api/health", (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-});
-
-process.on('unhandledRejection', (reason) => {
-    console.error('Unhandled Rejection:', reason);
-});
-
-app.listen(PORT, async () => {
-    console.log(`Maa Savitri Chatbot server running on port ${PORT}`);
-    console.log(`GEMINI_API_KEY loaded: ${process.env.GEMINI_API_KEY ? 'Yes' : 'No'}`);
-    
-    try {
-        const testModel = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
-        const result = await testModel.generateContent("Hello");
-        console.log('✅ Gemini API connection successful');
-    } catch (error) {
-        console.error('❌ Gemini API test failed:', error.message);
-    }
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
